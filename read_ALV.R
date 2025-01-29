@@ -5,7 +5,7 @@
 #' code and comments for further details.
 #' Author: T. Haraszti (haraszti@dwi.rwth-aachen.de)
 #' Date: 2018 -
-#' Licence: MIT
+#' Licence: CC-BY-4
 #' Warranty: None
 
 read.ALV <- function(filename){
@@ -99,7 +99,7 @@ read.ALV <- function(filename){
                                                                 )
                                                          )
                                               );
-        result$correlation <- matrix( result$correlation, byrow=T, ncol=5);
+        result$correlation <- matrix(result$correlation, byrow=T, ncol=5);
         i <- i1+1;
         colnames(result$correlation)<-c('tau','ch1','ch2','ch3','ch4');
     }
