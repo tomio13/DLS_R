@@ -944,21 +944,22 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
     # calculate the correlation but convert it to the experimental curve
     # scaling it and applying a constand background shift based on the known fit
     g2.calc <- g2.norm * func.array %*% dist + g2.bg
+    g2.diff <- fit$g2 - g2.calc
 
     dev.new()
-    plot(fit$tau, fit$g2 - g2.calc, log='x', type='o',
+    plot(fit$tau, g2.diff, log='x', type='o',
          xlab=expression(paste(tau, ', ms', sep='')),
          ylab= expression(paste('g'^'(2)', '(', tau, ')', sep='')),
          main='residual g2'
          )
 
-    correlation <- matrix(c(fit$tau, g2.cals), ncol= 2)
+    correlation <- matrix(c(fit$tau, g2.diff), ncol= 2)
     colnames(correlation) <- c('tau', 'ch1')
 
     return(list(
                       g2.orig = fit$g2,
+                      g2.calc = g2.calc,
                       correlation= correlation,
-                      g2.diff = fit$g2 - g2.calc,
                       q = fit$q,
                       eta = fit$eta,
                       temperature = fit$temperature,
