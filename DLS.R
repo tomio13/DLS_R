@@ -5,7 +5,7 @@
 #' code and comments for further details.
 #' Author: T. Haraszti (haraszti@dwi.rwth-aachen.de)
 #' Date: 2018 -
-#' Licence: MIT
+#' Licence: CC-BY-4
 #' Warranty: None
 
 
@@ -844,4 +844,126 @@ plot.dist.series <- function(namelst, Rh.array.refined= NULL, legends= NULL, ...
     if (!is.null(legends)) {
         legend('topright', col=1:N, pch= 1:N, legend= legends)
     }
+}
+
+###############################################################################
+# functions to manipulate size distribution / correlation
+
+
+g.2 <- function(tau, G.array, dist) {
+    #' calculate the correlation function for DLS
+    #' based on the delay times and an array for
+    #' the delay times with their weights
+    #' ideally the weights have a sum of 1
+    #' @param tau       array of delay times (ms)
+    #' @param G.array   array of exponent decay times (1/ms)
+    #' @param dist      weigth of the decay times
+    #'
+    #' @return an array for every tau value
+
+    func.array <- exp(outer(tau, -G.array))
+    return(func.array %*% dist)
+}
+
+
+correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
+    #' take a size fit object (list resulted by analysis.sizes)
+    #' plot the size distribution and activate a selector
+    #' so the user can select a range to be kept
+    #'
+    #' If Rh.min and / or Rh.max are specified, skip the selection plot,
+    #' use them to define the range
+    #'
+    #' Calculate the correlation function of the selection,
+    #'  and subtract from the original correlation function
+    #' plot what is remaining and return it as a table
+    #' Required fields in fit:
+    #' g2 the correlation function
+    #' tau the delay times
+    #' g2.norm --> normalization factor for g2
+    #' g2.bg --> background constant in the g2 data
+    #' during fit the (g2 - g2.bg)/g2.norm was fit
+    #'
+    #' @param fit   a fit list object from analysis.sizes
+    #' @param Rh.min    beginning of R-range to be kept, default NULL
+    #' @param Rh.max    end of R-range to be kept, default NULL
+    #'
+    #' @return  an array containing delay times and correlation values
+
+    if(is.null(fit$g2) || is.null(fit$tau) || is.null(fit$Rh.array) ||
+       is.null(fit$dist) || is.null(fit$temperature) || is.null(fit$eta) ||
+       is.null(fit$q)) {
+        cat('some critical data are missing\n')
+        cat('function requires fit having arrays for: g2, tau, Rh.array and dist at least\n')
+        return()
+    }
+
+    if (is.null(Rh.min) && is.null(Rh.max)) {
+        plot(fit$Rh.array, fit$dist, log='x', type='o',
+             main='click on the start and end area of distribution to be kept',
+             sub='right click when done'
+             )
+        selected <- locator()
+        # print(selected)
+        Rh.range <- selected$x
+        if (length(Rh.range) >= 2) {
+            Rh.range <- tail(selected$x, 2)
+        } else {
+            cat('one or no points were selected\n')
+            return()
+        }
+        Rh.min <- min(Rh.range)
+        Rh.max <- max(Rh.range)
+        # cat('selected:', Rh.min, Rh.max, '\n')
+    }
+
+    if (is.null(Rh.min)) {
+        Rh.min <- min(fit$Rh.array)
+    }
+    if (is.null(Rh.max)) {
+        Rh.max <- max(fit$Rh.array)
+    }
+
+    if (Rh.min == Rh.max) {
+        cat('empty range is selected\n')
+        return()
+    }
+
+    indx <- (fit$Rh.array >= Rh.min) & (fit$Rh.array <= Rh.max)
+    Rh.array <- fit$Rh.array[indx]
+    dist <- fit$dist[indx]
+    points(Rh.array, dist, col='blue', pch= 16, cex= 1.1)
+
+    kB <- 13.8064852; #J/K --> nm
+    g2.norm <- ifelse(is.null(fit$g2.norm), 1, fit$g2.norm)
+    g2.bg <- ifelse(is.null(fit$g2.bg), 0, fit$g2.bg)
+    D.array <- kB*fit$temperature / (6*pi*fit$eta*Rh.array); # in micron^2 / sec.
+    # unit matching to G in 1/ms = kHz
+    G.array <- 2*fit$q^2*D.array/1000;
+    func.array <- exp(outer(fit$tau, -G.array))
+    # calculate the correlation but convert it to the experimental curve
+    # scaling it and applying a constand background shift based on the known fit
+    g2.calc <- g2.norm * func.array %*% dist + g2.bg
+
+    dev.new()
+    plot(fit$tau, fit$g2 - g2.calc, log='x', type='o',
+         xlab=expression(paste(tau, ', ms', sep='')),
+         ylab= expression(paste('g'^'(2)', '(', tau, ')', sep='')),
+         main='residual g2'
+         )
+
+    return(list(
+                      tau = fit$tau,
+                      g2.orig = fit$g2,
+                      g2.calc = g2.calc,
+                      g2.diff = fit$g2 - g2.calc,
+                      q = fit$q,
+                      eta = fit$eta,
+                      temperature = fit$temperature,
+                      D.array = D.array,
+                      G.array = G.array,
+                      Rh.array = Rh.array,
+                      dist = dist
+             )
+    )
 }
