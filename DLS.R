@@ -70,31 +70,40 @@ smooth.dist <- function(dls.fit,
     #' @return  a list containing x and y arrays
 
     if (is.null(Rh.array)){
-        # Rh.array=exp(seq(log(0.01), log(1E4), len=250)),
-        Rh.array=exp(seq(log(min(dls.fit$Rh.array)), log(max(dls.fit$Rh.array)), len=250))
+        # resample the existing Rh.array to a relatively high number
+        # for interpolation with a spline
+        # sampling is in logarithmic scale
+        # Rh.array=exp(seq(log(min(dls.fit$Rh.array)), log(max(dls.fit$Rh.array)), len=250))
+        Rh.array=seq.log(min(dls.fit$Rh.array), max(dls.fit$Rh.array), len=250)
     }
 
-    x <- dls.fit$Rh.array;
-    lx <- log(x);
+    x <- dls.fit$Rh.array
+    # original array x is logarithmic, so its log(x) is linear
+    lx <- log(x)
 
+    # which distribution to use?
     if (which == 'N' && !is.null(dls.fit$N.dist)){
         y <- dls.fit$N.dist
     } else if(which == 'V' && !is.null(dls.fit$V.dist)){
         y <- dls.fit$V.dist
     } else {
+        # this is 'I' actually, the intensity weighted distribution
         y <- dls.fit$dist
     }
+    # the resampled array:
     x.out = log(Rh.array)
 
-    ret <- spline(lx, y, method= method, ..., xout= x.out);
-    clean.ret <- approx(lx, y, xout= x.out, yleft= 0, yright= 0, rule= 2);
+    ret <- spline(lx, y, method= method, ..., xout= x.out)
+    clean.ret <- approx(lx, y, xout= x.out, yleft= 0, yright= 0, rule= 2)
 
     #ret <- predict(f.sp, log(Rh.array));
     #overwrite x with the original (not log) Rh.array
-    ret$x <- Rh.array;
-    ret$y[ret$y < 0] <- 0;
-    ret$y[clean.ret$y < epsilon] <- 0;
-    # data are normally normalized to sum(y) = 1
+    ret$x <- Rh.array
+
+    # cut off negative overshooting parts:
+    ret$y[ret$y < 0] <- 0
+    ret$y[clean.ret$y < epsilon] <- 0
+    # by default data are normally normalized to sum(y) = 1
     # normalize to the maximum:
     if(norm == TRUE)   ret$y <- ret$y / max(abs(ret$y))
 
