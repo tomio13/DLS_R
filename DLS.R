@@ -903,12 +903,12 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
              main='click on the start and end area of distribution to be kept',
              sub='right click when done'
              )
-        selected <- locator()
+        # select maximum two points, and connect them with a line
+        # to show what range was selected
+        selected <- locator(2, type='l')
         # print(selected)
         Rh.range <- selected$x
-        if (length(Rh.range) >= 2) {
-            Rh.range <- tail(selected$x, 2)
-        } else {
+        if (length(Rh.range) < 2) {
             cat('one or no points were selected\n')
             return()
         }
