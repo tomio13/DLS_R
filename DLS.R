@@ -952,10 +952,12 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
          main='residual g2'
          )
 
+    correlation <- matrix(c(fit$tau, g2.cals), ncol= 2)
+    colnames(correlation) <- c('tau', 'ch1')
+
     return(list(
-                      tau = fit$tau,
                       g2.orig = fit$g2,
-                      g2.calc = g2.calc,
+                      correlation= correlation,
                       g2.diff = fit$g2 - g2.calc,
                       q = fit$q,
                       eta = fit$eta,
