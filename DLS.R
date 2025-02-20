@@ -11,21 +11,21 @@
 
 MSD <- function(a, N=3){
     #' Calculate he mean squared displacement assuming that the correlation function
-    #' is exp( -MSD*q**2), thus estimate: -log(correlation)/q**2
+    #' is exp( -MSD/(2N) q^2), thus estimate: -log(correlation)/q**2
     #' if q is in 1/micron, we get it in micron**2
     #' Kills NaN and infinite elements to -1
     #'
     #' @param a     a DLS object. A list containing 'correlation' and 'q' elements at least
     #'              The correlation element is a 2D array with first column the time, the others
-    #'              are the normalized correlation functions exp(-MSD*q**2).
+    #'              are the normalized correlation functions exp(-MSD/(2N) q^2).
     #' @param N     Dimensionality, it should be 3 for DLS because we detect the diffusion in 3D
     #' @return  an array containing the time and the MSD values
 
-    msd <- -log(as.array(a$correlation))*N/(a$q**2);
+    msd <- -log(as.array(a$correlation))*2*N/(a$q**2);
     #first column is tau, restore it!
     msd[,1] <- as.array(a$correlation[,1]);
 
-    msd[is.infinite(msd) ] <- -1;
+    msd[is.infinite(msd)] <- -1;
     msd[is.nan(msd)] <- -1;
     return(msd);
 }
@@ -73,7 +73,6 @@ smooth.dist <- function(dls.fit,
         # resample the existing Rh.array to a relatively high number
         # for interpolation with a spline
         # sampling is in logarithmic scale
-        # Rh.array=exp(seq(log(min(dls.fit$Rh.array)), log(max(dls.fit$Rh.array)), len=250))
         Rh.array=seq.log(min(dls.fit$Rh.array), max(dls.fit$Rh.array), len=250)
     }
 
@@ -246,7 +245,6 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
                            # weight is typically in the order of 0.3 ... 0.6, so do not top far
                            # above it:
                            weight.max = 0.66,
-                           #alpha.array = exp( seq( log(5E-3), log(50), len=30))){
                            alpha.array = seq.log(50, 5E-3, len=50),
                            factor= 0.99,
                            inherit = TRUE,
