@@ -914,13 +914,14 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
         # to show what range was selected
         selected <- locator(2, type='l')
         # print(selected)
-        Rh.range <- selected$x
+        Rh.range <- sort(selected$x)
+
         if (length(Rh.range) < 2) {
             cat('one or no points were selected\n')
             return()
         }
-        Rh.min <- min(Rh.range)
-        Rh.max <- max(Rh.range)
+        Rh.min <- Rh.range[1]
+        Rh.max <- Rh.range[2]
         # cat('selected:', Rh.min, Rh.max, '\n')
     }
 
