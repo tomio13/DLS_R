@@ -1,0 +1,15 @@
+Package: dls
+Version: 1.0
+Date: 2018-01-01
+Title: dynamic light scattering data processing
+Author: Tamás Haraszti [aut, cre]
+Maintainer: Tamás Haraszti <haraszti@dwi.rwth-aachen.de>
+Depends: R (>= 4.0.0)
+Suggests:
+Description: Dynamic light scattering or photon-correlation spectroscopy measures the fluctuations of the light intensity in a small volume of a suspension and establishes particle sizes based on the autocorrelation and its relation to the translational diffusion process. The core is a Stokes-Einstein relation. This package is a colleciton of tools to summarize the autocorrelation function and its analysis towards particle size distributions.
+Encoding: UTF-8
+License: CC BY 4.0
+URL: https://github.com/tomio13/DLS_R/
+BugReports: https://github.com/tomio13/DLS_R/issues
+Config/roxygen2/version: 8.0.0
+onfig/roxygen2/markdown: TRUE

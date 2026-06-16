@@ -1,25 +1,28 @@
-#' Dynamic light scattering analysis functions, especially designed for
-#' the ALV DLS system. However, the analysis and plotting tools are
-#' useful for any other data sets.
-#' They may require lists with specific elements, look into the
-#' code and comments for further details.
-#' Author: T. Haraszti (haraszti@dwi.rwth-aachen.de)
-#' Date: 2018 -
-#' Licence: CC-BY-4
-#' Warranty: None
-
-
 MSD <- function(a, N=3){
-    #' Calculate he mean squared displacement assuming that the correlation function
-    #' is exp( -MSD/(2N) q^2), thus estimate: -log(correlation)/q**2
+    #'  MSD: mean square displacement from autocorrelation
+    #' @details
+    #' Calculate he mean squared displacement from the intensity autocorrelation
+    #' function. The calculation is based on the Langevin equation model of
+    #' translational diffusion under the influence of thermal forces, that is
+    #' a Brownian motion.
+    #' The model results in the autocorrelation having the form
+    #' of exp(-MSD/(2N) q^2), thus estimate: -log(correlation)/q**2
     #' if q is in 1/micron, we get it in micron**2
     #' Kills NaN and infinite elements to -1
     #'
-    #' @param a     a DLS object. A list containing 'correlation' and 'q' elements at least
-    #'              The correlation element is a 2D array with first column the time, the others
-    #'              are the normalized correlation functions exp(-MSD/(2N) q^2).
-    #' @param N     Dimensionality, it should be 3 for DLS because we detect the diffusion in 3D
-    #' @return  an array containing the time and the MSD values
+    #' A key issue of this method is the strong limit close to 1 and close to 0,
+    #' where further diffusion cannot be resolved.
+    #'
+    #' @param a     a DLS list object. A list containing 'correlation' and 'q'
+    #'              elements at least. The correlation element is a 2D array within
+    #'              first column the time, the others are the normalized correlation
+    #'              functions exp(-MSD/(2N) q^2).
+    #' @param N     integer, the dimensionality, it should be 3 for DLS because we
+    #'              detect the diffusion in 3D.
+    #' @return  an array with the same dimensions as the autocorrelation table was,
+    #'          containing the time and the MSD values
+    #'
+    #' @export
 
     msd <- -log(as.array(a$correlation))*2*N/(a$q**2);
     #first column is tau, restore it!
@@ -35,17 +38,48 @@ MSD <- function(a, N=3){
 # Helper functions for distributions
 
 seq.log <- function(start, end, len=50){
+    #' seq() in log-scale
+    #' @details
     #' logaritmic sampled number sequence
-    #' using seq(log(start), log(end), length=len)
+    #' a shorthand for seq(log(start), log(end), length=len).
+    #' The resulted array is equidistant in log space.
     #'
-    #' the resulted array is equidistant in log space
     #' @param start double  the start value
     #' @param end double    the end value
     #' @param len integer   length of the resulted array
     #'
-    #' @return an 1D array including both ends
+    #' @return an log-spaced 1D array including both ends
+    #'
+    #' @export
 
-    return(exp(seq(log(start), log(end), length=len)))
+    return(exp(seq(log(start), log(end), length.out= len)))
+}
+
+
+g.2 <- function(tau, G.array, dist) {
+    #' g.2 correlation from delay times, exponents and a weight distribution
+    #'
+    #' @details
+    #'
+    #' calculate the correlation function for DLS
+    #' based on the delay times and an array for
+    #' the delay times with their weights
+    #' ideally the weights have a sum of 1
+    #'
+    #' This is a code snippet used in the analysis.sizes for fitting,
+    #' but extracted to simulate the autocorrelation functions for testing
+    #'
+    #' @param tau       array of delay times (ms)
+    #' @param G.array   array of exponent decay times (1/ms)
+    #' @param dist      weigth of the decay times
+    #'
+    #' @return an array for every tau value
+    #'
+    #' @export
+    #'
+
+    func.array <- exp(outer(tau, -G.array, '*'))
+    return(func.array %*% dist)
 }
 
 
@@ -56,18 +90,23 @@ smooth.dist <- function(dls.fit,
                         method='natural',
                         which= 'I',  ...){
     #' Calculate a smoothened version of the size distribution
-    #' based on spline() but with logarithmic size array
+    #' @details
+    #' The calculation is based on spline() but with logarithmic size array
+    #'
     #' @param dls.fit   a fit list returned by analyse.size below
     #' @param Rh.array  the new size array where we want to have the
     #'                  points. Use seq.lod to generate one
-    #' @param norm      should the distribution be normalized to
+    #' @param norm      Boolean, should the distribution be normalized to
     #'                  its absolute maximum?
-    #' @param epsilon   below this value, all interpolated dist values are set to zero
-    #' @param method    passed to spline as method
-    #' @param which     I,V or N for intensity, Volume or Number distribution
+    #' @param epsilon   float, below this value, all interpolated dist
+    #'                  values are set to zero
+    #' @param method    string, passed to spline as method
+    #' @param which     character, I,V or N for intensity, Volume or Number distribution
     #' @param ...       passed to spline for further parameters
     #'
     #' @return  a list containing x and y arrays
+    #'
+    #' @export
 
     if (is.null(Rh.array)){
         # resample the existing Rh.array to a relatively high number
@@ -114,18 +153,56 @@ smooth.dist <- function(dls.fit,
 # analysis functions: cumulant and size distribution
 
 
-analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
-    #' perform a cummulant analysis on the dls$correlation data
-    #' this should be an array with first column the tau values in milliseconds,
+analysis.cumulant <- function(dls,
+                              channels=c(1),
+                              lin.fit.limit = -2,
+                              start=5){
+    #' cumulant analysis of particle sizes
+    #' @details
+    #' perform a cummulant analysis on the dls$correlation data.
+    #' This should be an array with first column the tau values in milliseconds,
     #' further columns are correlator channels (if there is more than one)
+    #' The analysis assumes the correlation being in the form of:
+    #' beta * (1 + exp( - 2 Gamma*(t - K2/2 t^2 + K3/6 t^3 + ...))
+    #'
+    #' Gamma = q^2 D, where D = kB T/(6 pi eta R)
+    #' and polydispersity as P = K2/K1^2,
+    #'
+    #' There are two fitting steps. First a linearized version of the equation
+    #' comparing log(g - 1) ~ t (g is the autocorrelation data)
+    #' the second doing the actual exponential fit. This latter is better for
+    #' not distorting the statistics of the y-data (one can open a long argument about
+    #' this, since the correlation is already a derived information from intensity values).
+    #' The linear fit is ln(g-1) = 2*(K0 - Gamma*tau + K2/2*tau^2-K3/(2*3)*tau^3)
+    #'
+    #' The linear fit is limited to be > lin.fit.limit, the index of the used points
+    #' being returned as lin.fit.indx.
+    #'
+    #'
     #'
     #' @param dls       a list of dls data, e.g. from read.ALV
     #' @param channels  which channel to fit a single or an array of values (default 1)
     #' @param lin.fit.limit     the logarithm above this value will be
     #'                          taken (-1 --> 1/e) (default -2)
+    #' @param start     integer  starting index in the correlation array
     #'
-    #' @return
-    #' a list containing the fitted curves and extracted information
+    #' @return a list containing the fitted curves and extracted information
+    #'            lin.fit   linear fitting parameters returned by lm
+    #'            P.lin     polydispersity from linear fit
+    #'            P         polydispersity from exponential fit
+    #'            lin.fit.indx  index of points used in linear fit
+    #'            K.lin     Cumulant coefficients of linear fit
+    #'            K         cumulant coefficients from exponential fit
+    #'            fit       fit result of exponential fit (optim)
+    #'            par       returned fit parameters of exponential fit
+    #'            D         diffusion coefficien from exponential fit
+    #'            Rh        hydrodynamic (equivalent) radius from D
+    #'            D.lin.avg average diffusion coefficient from linear fit
+    #'            Rh.lin    hydrodynamic radius from D.lin.avg
+    #'            lin.min   the minimum of the correlation function if it did not go to 0
+    #'            y.lin.fitted  fitted correlation points with linear fit
+    #'            y.fitted      fitted correlation points with exponential fit
+    #'            tau           time delay array
 
     # kb is 10^-23 J/K; D is in micron^2/s thus 10^-12, mPas thus 10^-3: 23-15 = 8
     # 1 nm is 10^-9 m, thus 10^-8 = 10 nm... keep a 10x in kB, then we have Rh in nm
@@ -134,6 +211,7 @@ analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
     N <- nrow(dls$correlation);
     tau <- rep(dls$correlation[,1], ncol);
     y <- as.vector(dls$correlation[,-1][,channels]);
+
     # limit to start:N:
     tau <- tau[start:N];
     y <- y[start:N];
@@ -149,8 +227,8 @@ analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
 
     # block log() from going crazy:
     yls <- y - amp;
-    yls [ yls <= 0 ] <- exp(-10);
-    yls <- log( yls );
+    yls [yls <= 0] <- exp(-10);
+    yls <- log(yls);
     # limit the fit to the first part:
     indx.fit <- yls > lin.fit.limit;
     yls.fit <- yls[indx.fit];
@@ -166,7 +244,7 @@ analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
     tau.fit <- -tau.fit;
 
     # lin.fit <- lm( yls.fit ~ 1 + tau.fit + tau.fit.2);
-    lin.fit <- lm( yls.fit ~ 1 + tau.fit + tau.fit.2 + tau.fit.3);
+    lin.fit <- lm(yls.fit ~ 1 + tau.fit + tau.fit.2 + tau.fit.3);
 
     # we are fitting g(1)**2, with 2x the coefficients of g(1)(tau).
     K.lin <- coef(lin.fit)[-1]/2;  #coeffs = 2*(K0,K1,K2,K3)
@@ -177,8 +255,12 @@ analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
     Rh.lin <- kB*dls$temperature/(6*pi*dls$eta*D.lin.avg); #in nm
 
     # now go for a nonlinear fitting:
-    f <- function(p, x.array, y.array, weights=rep(1.0, length(x.array)) ){
-        sum( weights*(p[1]*exp( -p[2]*x.array + p[3]*x.array^2 - p[4]*x.array^3) - y.array)^2 );
+    f <- function(p,
+                  x.array,
+                  y.array,
+                  weights=rep(1.0, length(x.array))
+                  ){
+        sum(weights*(p[1]*exp( -p[2]*x.array + p[3]*x.array^2 - p[4]*x.array^3) - y.array)^2 );
     }
 
     plot(-tau.fit, yls.fit, xlab= expression(paste(tau,', ms', sep='')),
@@ -238,9 +320,11 @@ analysis.cumulant <- function(dls, channels=c(1), lin.fit.limit = -2, start=5){
 }
 
 
-analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50),
+analysis.sizes <- function(dls,
+                           Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50),
                            g2.channel = c(2),
-                           tau.min= -1, tau.max= -1,
+                           tau.min= -1,
+                           tau.max= -1,
                            start.parm = NULL,
                            # weight is typically in the order of 0.3 ... 0.6, so do not top far
                            # above it:
@@ -249,86 +333,143 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
                            factor= 0.99,
                            inherit = TRUE,
                            plot.fit = TRUE){
-#'  A regularized fitting to construct the correlation function in dls as a sum of exponentials
-#'  The method is between the CONTIN and a direct regularized fit
-#'  It fits the g(2)-1 function (squared) not its square root as in the literature, avoiding
-#'  the extra squaring of the result.
-#'  Using boxed constrains, the parameters are limited to the [0,1] closed interval.
-#'  The best alpha is searched in the alpha.array, to provide the minimum of the fit error f.norm
-#'  If inherit is TRUE, the previous result will be fed as starting parameters
-#'  If start.parm is NULL, a zero array is used for starting parameter, with one point set to 0.5
-#'  for the radius corresponding to where the correlation function falls to 1/e it amplitude
-#'
-#'  Running with decreasing alpha values, we get the most details of the fit which still
-#'  improved the fit by factor to the previous best.
-#'  (High alpha means smoothness dominates the distribution.)
-#'
-#'  The algorithm was inspired by:
-#"      A. Scotti et al. 'The CONTING algorithm and its application to determine
-#'      the size distribution of microgel suspensions' in The Journal of Chemical Physics
-#'      vol. 142, 234905 (2015)
-#' and the original CONTIN papers:
-#'      S. W. Provencher, 'CONTIN: A general purpose constrained regularization program
-#'      for inverting noisy linear algebric and integral equations' in
-#'      Computer Physics Communications vol. 27, 229 - 242 (1982)
-#' and
-#'      S. W. Provencher, 'A constrained regularization method for inverting data represented
-#'      by linear algebric or integral equations' in
-#'      Computer Physics Communications vol.: 27, 213 - 227 (1982)
-#'
-#'
-#' @param dls           the dls list containing the correlation data as well as
-#'                      parameters, such as scattering vector, angle, temperature...
-#' @param Rh.array      an array of radii in nanometers, nm
-#'                      Select the radius distribution carefully. Too low walues will bias
-#'                      the plateau. The large range may have to go to up to non-physical
-#'                      ranges, e.g. more than 50 microns.
-#'                      Default array is taken from the ALV software
-#'
-#' @param g2.channel    name of the channel in the correlation array
-#' @param tau.min       start fitting from this delay value (ms)
-#' @param tau.max       fit up to this delay time (ms)
-#'                      if they are set to -1, then the [3:length(g2)] indices are taken
-#'                      (ALV standard values)
-#' @param start.param   the distribution array to start with. By default it is estimated
-#'                      using the exponential decay of the g1 function
-#' @param weight.max    maximal weight allowed. It may influence the convergence, because
-#'                      g2 values close to zero may kick it up errorneously
-#'
-#' @param alpha.array   an array of alpha values to be scanned through. It is good to have
-#'                      it logarithmically spaced
-#' @param factor        a new error is suitable new result if it is less than factor*old error
-#'                      if the alphas are increasing then less or equal is taken
-#' @param inherit       Feed the best fit to the start values of the next alpha fit
-#' @param plot.fit      a Boolean, if set, plot the correlation, fit and residuals in a split plot
+    #' Size distribution estimation from correlation data
+    #'
+    #' @details
+    #'  A regularized fitting to construct the correlation function in dynamic
+    #'  light scattering as a sum of exponentials.
+    #'  The method implemented here is between the CONTIN and a direct regularized fit.
+    #'  It fits the g(2)-1 function (squared) not its square root as in the literature, avoiding
+    #'  the extra squaring of the result.
+    #'
+    #'  The intensity autocorrelation is background corrected (constant subtracted) and
+    #'  normalized to 1 before fitting. The fitted result is then scaled back to the original
+    #'  data.
+    #'  For every requested alpha value the fit is performed using the Rh array.
+    #'  The exponents are Gamma = 2*q**2*(kB T)/(6 pi eta Rh),
+    #'  for every tau delay in tau.array the exponent goes:
+    #'      func.array <- exp(outer(tau, -G.array, "*"))
+    #'  from which the error is (alpha.parm is one of the alpha.array)
+    #'  sum(
+    #'      (weights*(func.array%*%x - g2))^2) + sum((alpha.parm*Om%*%x)[-c(1,N)]^2
+    #'      )
+    #'
+    #'  Using boxed constrains, the parameters are limited to the [0,1] closed interval.
+    #'  The best alpha is searched in the alpha.array, to provide the minimum of the
+    #'  fit error f.norm.
+    #'  If inherit is TRUE, the previous result will be fed as starting parameters
+    #'  If start.parm is NULL, a zero array is used for starting parameter,
+    #'  with one point set to 0.5 for the radius corresponding to where the correlation
+    #'  function falls to 1/e it amplitude.
+    #'
+    #'  Running with decreasing alpha values, we get the most details of the fit which still
+    #'  improved the fit by factor to the previous best.
+    #'  (High alpha means smoothness dominates the distribution.)
+    #'
+    #' @references
+    #'  The algorithm was inspired by:
+    #"      A. Scotti et al. 'The CONTING algorithm and its application to determine
+    #'      the size distribution of microgel suspensions' in The Journal of Chemical Physics
+    #'      vol. 142, 234905 (2015)
+    #' and the original CONTIN papers:
+    #'      S. W. Provencher, 'CONTIN: A general purpose constrained regularization program
+    #'      for inverting noisy linear algebric and integral equations' in
+    #'      Computer Physics Communications vol. 27, 229 - 242 (1982)
+    #' and
+    #'      S. W. Provencher, 'A constrained regularization method for inverting data represented
+    #'      by linear algebric or integral equations' in
+    #'      Computer Physics Communications vol.: 27, 213 - 227 (1982)
+    #'
+    #'
+    #' @param dls           the dls list containing the correlation data as well as
+    #'                      parameters, such as scattering vector, angle, temperature...
+    #' @param Rh.array      an array of radii in nanometers, nm
+    #'                      Select the radius distribution carefully. Too low walues will bias
+    #'                      the plateau. The large range may have to go to up to non-physical
+    #'                      ranges, e.g. more than 50 microns.
+    #'                      Default array is taken from the ALV software
+    #'
+    #' @param g2.channel    string, name of the channel in the correlation array
+    #' @param tau.min       float, start fitting from this delay value (ms)
+    #' @param tau.max       float, fit up to this delay time (ms)
+    #'                      if they are set to -1, then the [3:length(g2)] indices are taken
+    #'                      (ALV standard values)
+    #' @param start.parm   array, the distribution array to start with. By default it is estimated
+    #'                      using the exponential decay of the g1 function
+    #' @param weight.max    float, the maximal weight allowed
+    #'                      It may influence the convergence, because g2 values close
+    #'                      to zero may kick it up errorneously
+    #'
+    #' @param alpha.array   an array of alpha values to be scanned through. It is good to have
+    #'                      it logarithmically spaced
+    #' @param factor        float, a new error is suitable new result if it is less than
+    #'                      factor*old error. If the alphas are increasing then less or
+    #'                      equal is taken.
+    #'
+    #' @param inherit       Boolean, if TRUE, feed the best fit to the start values of
+    #'                      the next alpha fit
+    #' @param plot.fit      Boolean, if set, plot the correlation, fit and residuals
+    #'                      in a split plot
+    #'
+    #' @return              a list describing all possible type of results, such as
+    #'                      the resulted fit errors for various alpha values,
+    #'                      the size distribution, the corresponding Gamma, D and Rh arrays,
+    #'                      and the error parts
+    #'
+    #'      end.fit     the best fit object
+    #'              The following are taken over the DLS list input:
+    #'      filename    dls$filename, filename of the original data
+    #'      time        dls$time, the timestamp of the measurement
+    #'      temperature temperature
+    #'      eta         viscosity
+    #'      q           scattering vector
+    #'      tau         delay time array of the correlation function
+    #'      weight      the weight array provided
+    #'              Fit results
+    #'      fitted      fitted correlation data
+    #'      residuals   error between correlation and fitted results
+    #'      g2          original correlation array
+    #'      g2.norm     normalization factor of correlation data
+    #'      g2.bg       constant background of correlation data
+    #'      D.array     diffusion coefficients corresponding to the size array
+    #'      G.array     exponent (1/time) array corresponding to the size array
+    #'      Rh.array    user requested size array (hydrodynamic radii)
+    #'      dist        the amplitudes of the distributed for each Rh value
+    #'      dist.norm   the normalized amplitudes of the distributed for each Rh value
+    #'                  normalization is such that the maximum is 1.
+    #'      N.dist      the number distribution amplitudes
+    #'      V.dist      the volume weighted distribution amplitudes
+    #'          For each alpha value the optimum was calculated
+    #'      alphas      alpha.array
+    #'      errs        the fit error for each alpha value
+    #'      x.norm      the curvature part of err
+    #'      f.norm      the fit errors part of err
+    #'      end.alpha   the selected best alpha value
+    #' @export
 
     if(length(Rh.array) < 1){
-        cat("Invalid size array Rh\n");
-        return;
+        cat("Invalid size array Rh\n")
+        return()
     }
     # change display precision:
     old.opt <- options();
-    options(digits = 4, scipen=-2);
+    options(digits = 4, scipen=-2)
 
     kB <- 13.8064852; #J/K --> nm
-    N <- length(Rh.array);
+    N <- length(Rh.array)
     D.array <- kB*dls$temperature / (6*pi*dls$eta*Rh.array); #in micron**2/second
     # from:  D.lin.avg <- K.lin[1]/(q**2)*1000; #micron**2/second; already divided by 2
-    # remove the 2* factor to work on the g(1)(tau):
+    G.array <- 2*dls$q^2*D.array/1000
 
-    # unit matching to G in 1/ms = kHz
-    # G.array <- dls$q^2*D.array/1000;
-    G.array <- 2*dls$q^2*D.array/1000;
-
-    # tau <- dls$correlation[,'tau'];
+    # tau <- dls$correlation[,'tau']
     tau <- dls$correlation[,'tau'];
     tau.range = range(tau) # to be used in plotting
 
     if(tau.min <= 0){
         start <- 3;
     } else {
-        start <- max(which(tau < tau.min));
-        if(start < 1)          start <- 1;
+        start <- max(which(tau < tau.min))
+        if(start < 1)          start <- 1
     }
 
     if(tau.max <= 0){
@@ -336,13 +477,13 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
         N.tau <- length(tau)
     } else {
         N.tau <- max(which(tau < tau.max))
-        if(N.tau < start )     N.tau <- length(tau);
+        if(N.tau < start )     N.tau <- length(tau)
     }
-    cat('Fit starts at:',start, tau[start],'ms \n');
-    cat('Fit ends at:',N.tau, tau[N.tau],'ms \n');
+    cat('Fit starts at:',start, tau[start],'ms \n')
+    cat('Fit ends at:',N.tau, tau[N.tau],'ms \n')
     tau <- tau[start:N.tau];
 
-    func.array <- exp(outer(tau, -G.array, "*"));
+    func.array <- exp(outer(tau, -G.array, "*"))
     # now each column is the time, the rows are the Rh.array related decay rate (Gamma)
     # reduce the matrix to something useful
     # and our result transforms from g2 to y:
@@ -361,17 +502,17 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
         g2.bg <- 0;
     }
 
-    g2 <- g2 - g2.bg;
+    g2 <- g2 - g2.bg
 
     if (weight.max > 0) {
         # weight from the maximized entropy paper:
         #   S-L Nyeao and B. Chu, Macromolecules 22:3998-4009 (1989)
         # formula (20) using B=1
-        # weight <- (1 + g2)/(4 * g2);
+        # weight <- (1 + g2)/(4 * g2)
         weight <- 1/(4 * g2) + 0.25
         # cancel oversized weights and those in the noise range:
         # (it is clear that this should not happen...)
-        weight[weight < 1E-3] <- 0;
+        weight[weight < 1E-3] <- 0
         # weigh.max used to be 500
         weight[weight > weight.max] <- weight.max
         # debug
@@ -398,14 +539,14 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
     # is, using the second derivative of this distribution.
     #
     # create a second derivative operator matrix:
-    Om <- matrix(0, ncol=N, nrow=N);
-    diag(Om) <- -2;
-    indx.1 <- matrix(1:N, ncol=2, nrow=N);
-    indx.2 <- indx.1;
-    indx.1[,1] <- indx.1[,1] - 1;
-    indx.2[,2] <- indx.2[,2] - 1;
-    Om[indx.1[-1,] ] <- 1;
-    Om[indx.2[-1,] ] <- 1;
+    Om <- matrix(0, ncol=N, nrow=N)
+    diag(Om) <- -2
+    indx.1 <- matrix(1:N, ncol=2, nrow=N)
+    indx.2 <- indx.1
+    indx.1[,1] <- indx.1[,1] - 1
+    indx.2[,2] <- indx.2[,2] - 1
+    Om[indx.1[-1,] ] <- 1
+    Om[indx.2[-1,] ] <- 1
     # multiplying this with the size distribution in x will give
     # the second derivative function. The last points have a tailing
     # error, which we drop.
@@ -434,21 +575,21 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
         alphas.decreasing <- FALSE
     }
 
-    errs <- rep(0.0, length(alphas));
-    x.norm <- rep(0.0, length(alphas));
-    f.norm <- rep(0.0, length(alphas));
+    errs <- rep(0.0, length(alphas))
+    x.norm <- rep(0.0, length(alphas))
+    f.norm <- rep(0.0, length(alphas))
 
     dist.array <- array(0, dim= c(length(Rh.array), length(alphas)))
 
     i <- 1;
     # the error will never be so high...
-    err.min <- Inf;
-    end.alpha <- -1;
-    end.fit <- NULL;
+    err.min <- Inf
+    end.alpha <- -1
+    end.fit <- NULL
 
 
-    cat('running on', length(Rh.array),'size values\n');
-    cat('and',length(tau),'data points\n');
+    cat('running on', length(Rh.array),'size values\n')
+    cat('and',length(tau),'data points\n')
     # start with some reasonable parameters
     # assuming a single exponential curve, one can estimate the decay rate
     #  at the 1/e time value, where tau/t = 1
@@ -456,57 +597,58 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
     # this single peak has some value, e.g. 0.5 to start with
     indx.tau.R <- max(which(g2 > exp(-1)))
     tau.R <- tau[indx.tau.R]
-    R <- dls$q**2*kB*dls$temperature*tau.R / (3000*pi*dls$eta);
-    cat('1/e time is:', tau.R,'value:', g2[indx.tau.R], '\n');
-    cat('Estimated radius from exponential decrease is', R, 'nm\n');
+    R <- dls$q**2*kB*dls$temperature*tau.R / (3000*pi*dls$eta)
+    cat('1/e time is:', tau.R,'value:', g2[indx.tau.R], '\n')
+    cat('Estimated radius from exponential decrease is', R, 'nm\n')
 
     set.parm <- TRUE;
     if(! is.null(start.parm)){
         if(length(start.parm) == length(Rh.array)){
-            par.start <- start.parm;
-            set.parm <- FALSE;
+            par.start <- start.parm
+            set.parm <- FALSE
         }else{
-            cat('Start parameters have to have a length of', length(Rh.array),'\n');
-            set.parm <- TRUE;
+            cat('Start parameters have to have a length of', length(Rh.array),'\n')
+            set.parm <- TRUE
         }
     }
     if(set.parm == TRUE){
-        cat('Setting up start paramters for fitting automatically\n');
-        par.start <- rep(0, N);
-        #cat('Setting R:',R,'\n');
-        cat('Setting R:',R,'nm to 0.5\n');
+        cat('Setting up start paramters for fitting automatically\n')
+        par.start <- rep(0, N)
+        cat('Setting R:',R,'nm to 0.5\n')
         par.start[max(which(Rh.array <= R)) ] <- 0.5
     }
 
     # run through the reularizer series:
     for(alpha in alphas){
-        # these start values give a quite good start estimate:
+        #  these start values give a quite good start estimate:
         #  the end values are the amplitudes the various exponents
         #  building up the sum forming g2(tau)
-        # Constrains are now built into the error landscape...
-        fit <- optim(par.start, f, method='L-BFGS-B',
+        #  Constrains are now built into the error landscape...
+        fit <- optim(par.start,
+                     f,
+                     method='L-BFGS-B',
                      upper= rep(1.0, length(par.start)),
                      lower= rep(0.0, length(par.start)),
                      control=list(maxit= 500),
-                    alpha.parm = alpha, weights= weight);
+                     alpha.parm = alpha, weights= weight)
 
         # cat('i:',i,'alpha:', alpha, "error", fit$value,'\n', sep='\t');
         errs[i] <- fit$value; #the value of f(), which is the estimated error
-        x.norm[i] <-  sum((Om%*%fit$par)[-c(1,N)]^2);
+        x.norm[i] <-  sum((Om%*%fit$par)[-c(1,N)]^2)
 
         # the error is recalculated without weight and alpha, only the
         # exponential distribution:
-        f.norm[i] <- f(fit$par, alpha.parm=0, weights= weight);
-        dist.array[,i] <- fit$par;
+        f.norm[i] <- f(fit$par, alpha.parm=0, weights= weight)
+        dist.array[,i] <- fit$par
 
         # while it is quite bad for the constrOptim, it works with optim
         # update the start with the result of the previous run
         # it causes roughening only when needed (or so we hope)
-        if(inherit == TRUE)        par.start <- fit$par;
+        if(inherit == TRUE)        par.start <- fit$par
 
         # instead of running it again, check if it is the best
         # so far and store it if it was so
-        cat('i:',i,'alpha:', alpha, '    error', fit$value,'    chi2',f.norm[i],'\n', sep='\t');
+        cat('i:',i,'alpha:', alpha, '    error', fit$value,'    chi2',f.norm[i],'\n', sep='\t')
         # while for small alpha it gives the same result, it should be sane
         # following the chi2 minima in the game: which is then the best fit?
         # originally we used the complete error to estimate improvements
@@ -518,31 +660,22 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
         if(f.norm[i] < factor*err.min ||
            (alphas.decreasing == FALSE && f.norm[i] <= factor*err.min)){
             #err.min <- fit$value;
-            err.min <- f.norm[i];
-            end.fit <- fit;
-            end.alpha <- alpha;
+            err.min <- f.norm[i]
+            end.fit <- fit
+            end.alpha <- alpha
         }
         #next:
-        i<- i +1;
+        i<- i +1
     }
 
     # transform the fitted data to the original g2
     # put back to the square, for the similarity to the data.
     # y.fitted <- g2.m*(func.array%*%end.fit$par)**2 +g2.bg;
-    y.fitted <- g2.m*(func.array%*%end.fit$par) +g2.bg;
+    y.fitted <- g2.m*(func.array%*%end.fit$par) +g2.bg
 
     # print some summary:
     cat('Best alpha was:', end.alpha,'\n', sep='\t');
     cat('Best error:', err.min,'\n', sep='\t');
-#    cat('Summary of errors\n');
-#    err.matrix <- matrix( c(alphas, errs, x.norm, x.norm*alphas, f.norm), ncol=5)
-#    colnames(err.matrix) <- c('alphas','error','reg.error','reg*alpha','funciton error');
-#    print(err.matrix)
-
-    # plot.DLS(dls, ch= 'ch1');
-    # lines(tau, y.fitted, col='red', lwd=2);
-    # indicate the noise limit defined by tau.max:
-    # abline( h = g2[N.tau], col='blue', lwd=2);
 
     # How to get other forms of distribution?
     # form factor: p.R
@@ -606,16 +739,20 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
     }
 
     return(list(fit= end.fit,
-                # also export the time stamp
+                # dls parameters
                 filename = dls$filename,
                 time = dls$time,
                 temperature= dls$temperature,
                 eta = dls$eta,
                 q = dls$q,
-                #fit.0 = fit.0,
                 tau = tau,
-                fitted = y.fitted, weight= weight, residuals= g2.orig - y.fitted,
-                g2= g2.orig, g2.norm = g2.m, g2.bg = g2.bg,
+                # fit results / parameters
+                fitted = y.fitted,
+                weight= weight,
+                residuals= g2.orig - y.fitted,
+                g2= g2.orig,
+                g2.norm = g2.m,
+                g2.bg = g2.bg,
                 D.array = D.array,
                 G.array = G.array,
                 Rh.array = Rh.array,
@@ -623,8 +760,11 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
                 dist.norm= dist / max(dist),
                 N.dist = N.dist,
                 V.dist = V.dist,
-                x.norm = x.norm, f.norm = f.norm,
-                alphas = alphas, end.alpha= end.alpha, errs = errs,
+                x.norm = x.norm,
+                f.norm = f.norm,
+                alphas = alphas,
+                end.alpha= end.alpha,
+                errs = errs,
                 dist.array = dist.array));
 }
 
@@ -632,44 +772,30 @@ analysis.sizes <- function(dls, Rh.array= seq.log(8.66264E-3, 8.66264E3, len=50)
 ################################################################################
 # plot functions designed for DLS
 
-
-plot.correlation <- function(a, log='x', add= FALSE, ...){
-    #' plot the correlation funciton from a DLS measurement
-    #' expects a 2 or 4 channel data set
-    #' Parameters:
-    #' an array, where first column is tau
-    #' further columns are the correlation function
-    #' return value: none
-    tau <- a[,1]
-    if( dim(a)[2] < 2 ){
-        cat(' array should have more than one column\n');
-        return
-    }
-
-    if (add == TRUE) {
-        points(a[,1], a[,2], ...)
-    } else {
-        plot(a[,1], a[,2], xlab='delay time, ms', ylab='correlation', log= log, ...)
-    }
-
-    M <- dim(a)[2]
-    if( M > 2){
-        for( i in  3:M) {
-            if( sum(a[,i]) > 0) points(a[,1], a[,i], col=i-1)
-        }
-    }
-}
-
-
-plot.DLS <- function(dls, fit=NULL, ch=c('ch1', 'ch2'), dual= TRUE, log='x', xlim= NULL,...){
+plot.DLS <- function(dls,
+                     fit=NULL,
+                     ch=c('ch1', 'ch2'),
+                     dual= TRUE,
+                     log='x',
+                     xlim= NULL,
+                     ...){
+    #' Plotting DLS data, that is correlation and its fit
+    #'
+    #' @details
+    #'
     #' Quick plotting of the autocorrelation in semilog format as it is common
     #' if fit is provided for the whole tau range, add the prediction of the fit
     #' @param dls   a DLS imported data list
-    #' @param fit a cumulative fit list, not a fit object! (no predict() method!)
-    #' @param ch character array    which channels to plot
-    #' @param dual Boolean  if true, plot the residuals on the bottom
-    #' @param log character string   which axis should be a log plot
-    #' @param ... passed to plot()
+    #' @param fit   a cumulant fit list, not a fit object! (no predict() method!)
+    #' @param ch    character array    which channels to plot
+    #' @param dual  Boolean  if true, plot the residuals on the bottom
+    #' @param log   text    which axis should be a log plot
+    #' @param xlim  text    title of x-axis, passed to plot()
+    #' @param ...   passed to plot()
+    #'
+    #' @return nothing
+    #'
+    #' @export
 
     if (!is.null(fit) && dual){
         # we want a double plot
@@ -680,12 +806,13 @@ plot.DLS <- function(dls, fit=NULL, ch=c('ch1', 'ch2'), dual= TRUE, log='x', xli
     tau <- dls$correlation[,'tau']
     for (this.ch in ch) {
         if (firstplot) {
-            plot(tau, dls$correlation[,this.ch],
+            plot(tau,
+                 dls$correlation[,this.ch],
                  log= log,
                  xlab = "delay time, ms",
-                ylab= expression(paste(plain(g)^2,'(',tau,')', sep='')),
-                xlim= xlim,
-                ...
+                 ylab= expression(paste(plain(g)^2,'(',tau,')', sep='')),
+                 xlim= xlim,
+                 ...
             )
             firstplot <- FALSE
         }
@@ -705,7 +832,7 @@ plot.DLS <- function(dls, fit=NULL, ch=c('ch1', 'ch2'), dual= TRUE, log='x', xli
             par(new= TRUE, fig= c(0, 1, 0.0, 0.3), mar= c(5, 4.5, 0, 1), xaxt='s')
             plot(tau, dls$correlation[, 1] - prediction,
                 type= 'l',
-                xlab= 'delay time, ms',
+                xlab= expression(paste(tau,', ms', sep='')),
                 ylab= 'error',
                 log = log,
                 xlim = xlim,
@@ -731,16 +858,29 @@ plot.DLS.dist <- function(ft,
                           xlim= NULL,
                           ylim= NULL,
                           ...){
-    #' shortcut to plot the size distribution from a fit resulted in analysis.sizes
+    #' plot the size distribution of a analysis.sizes fit
+    #'
+    #' @details
+    #'
+    #' simple plot of the size distribution
     #' @param ft a fit list from a size analysis
     #' @param which     a character I, N or V for the type of distribution
-    #' @param smooth    bool,   also plot a smoothened line across
-    #'                          use smooth.dist above
-    #' @param add       bool,   add to the plot, not a new plot
-    #' @param xlab, ylab, type, log, main, col: plot parameters
-    #'  all further parameters go to smooth.dist
+    #' @param smooth    Boolean,   also plot a smoothened line across
+    #'                             use smooth.dist above
+    #' @param add       Boolean,   add to the plot, not a new plot
+    #' @param xlab      text, passed to plot
+    #' @param ylab      text, passed to plot
+    #' @param type      character, passed to plot
+    #' @param log       text passed to plot, default is 'x'
+    #' @param main      text, title of plot, passed to plot
+    #' @param col       text or integer, color of the plot
+    #' @param xlim      array of 2, passed to plot
+    #' @param ylim      array of 2, passed to plot
+    #' @param ...       all other parameters passed to smooth.dist()
     #'
     #' @return invisible return the smoothed distribution
+    #'
+    #' @export
 
     if (which == 'V' && !is.null(ft$V.dist)){
         y <- ft$V.dist
@@ -777,29 +917,37 @@ plot.DLS.dist <- function(ft,
 }
 
 
-###############################################################################
-# plot functions for various series
-# these assume lists generated either the way the read.ALV does,
-# or the analysis.sizes does.
-
-
-plot.corr.series <- function(namelst, norm= TRUE, norm.range=c(4:8), legends= NULL, ...) {
-    #' take a list of variable names,
-    #' and plot the correlation function of each
-    #' making time the legend
+plot.corr.series <- function(namelst,
+                             norm= TRUE,
+                             norm.range=c(4:8),
+                             legends= NULL,
+                             envir= .GlobalEnv,
+                             ...) {
+    #' summary plot for several correlation data sets
+    #' @details
+    #' Pick a list of variale names,
+    #' and plot the correlation function of each, making time the legend
+    #' Because of the list of variables, plot only the first correlation channel.
+    #'
     #' For example having experiments loaded as names
     #' var.001, var.002, var.003...
-    #' you can use lst(pattern='^var\\.') for namelst.
+    #' you can use ls(pattern='^var\\.') for namelst.
     #'
-    #' @param namelst a list of names
-    #' @param norm  bool    if true, normalize the correlation functions to 1
+    #' @param namelst   an array of variable names
+    #' @param norm      bool if true, normalize the correlation functions to 1
     #' @param norm.range array  which points to use for normalization
+    #' @param legends   text array of legends
+    #' @param envir     the environment where to search for the variables
+    #' @param ...       all further parameters are passed to plot
     #'
     #' @return nothing
+    #'
+    #' @export
+
     N <- length(namelst)
 
     for (i in 1:N){
-        a <- get(namelst[i], env= .GlobalEnv)
+        a <- get(namelst[i], envir= envir)
         x <- a$correlation[,1]
         y <- a$correlation[,2]
         if (norm) {
@@ -822,20 +970,27 @@ plot.corr.series <- function(namelst, norm= TRUE, norm.range=c(4:8), legends= NU
 }
 
 
-plot.dist.series <- function(namelst, Rh.array.refined= NULL, legends= NULL, ...) {
+plot.dist.series <- function(namelst,
+                             Rh.array.refined= NULL,
+                             legends= NULL,
+                             envir= .GlobalEnv,
+                             ...) {
     #' take a list of variable names for fits made using analysis.sizes,
     #' and plot the size distribution from them
     #'
     #' @param namelst   an array of variable names containing fits
-    #' @param Rh.arrah.refined  an array of radii to be used (optional)
-    #' @param legend    array of strings to be used as legends
+    #' @param Rh.array.refined  an array of radii to be used (optional)
+    #' @param legends   array of strings to be used as legends
+    #' @param envir     the environment to search for the variables
     #' @param ...       extra plot parameters
     #'
     #' @return nothing
+    #'
+    #' @export
 
     N <- length(namelst)
     for ( i in 1:N) {
-        a <- get(namelst[[i]], env= .GlobalEnv)
+        a <- get(namelst[[i]], envir= envir)
         if (i==1) {
              plot(a$Rh.array, a$dist, log='x',
                  xlab='hydrodynamic radius, nm', ylab='intensity weight',
@@ -853,27 +1008,12 @@ plot.dist.series <- function(namelst, Rh.array.refined= NULL, legends= NULL, ...
     }
 }
 
-###############################################################################
-# functions to manipulate size distribution / correlation
-
-
-g.2 <- function(tau, G.array, dist) {
-    #' calculate the correlation function for DLS
-    #' based on the delay times and an array for
-    #' the delay times with their weights
-    #' ideally the weights have a sum of 1
-    #' @param tau       array of delay times (ms)
-    #' @param G.array   array of exponent decay times (1/ms)
-    #' @param dist      weigth of the decay times
-    #'
-    #' @return an array for every tau value
-
-    func.array <- exp(outer(tau, -G.array))
-    return(func.array %*% dist)
-}
-
 
 correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
+    #' recalculate correlation function with limited size window
+    #'
+    #' @details
+    #'
     #' take a size fit object (list resulted by analysis.sizes)
     #' plot the size distribution and activate a selector
     #' so the user can select a range to be kept
@@ -884,6 +1024,7 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
     #' Calculate the correlation function of the selection,
     #'  and subtract from the original correlation function
     #' plot what is remaining and return it as a table
+    #'
     #' Required fields in fit:
     #' g2 the correlation function
     #' tau the delay times
@@ -891,11 +1032,24 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
     #' g2.bg --> background constant in the g2 data
     #' during fit the (g2 - g2.bg)/g2.norm was fit
     #'
-    #' @param fit   a fit list object from analysis.sizes
+    #' @param fit       a size fit list object from analysis.sizes
     #' @param Rh.min    beginning of R-range to be kept, default NULL
     #' @param Rh.max    end of R-range to be kept, default NULL
     #'
-    #' @return  an array containing delay times and correlation values
+    #' @return  alist containing
+    #'          g2.orig     original correlation data
+    #'          g2.calc     new corelation function
+    #'          correlation array with tau and the residual correlation
+    #'          q           q from dls
+    #'          eta         viscosity from dls
+    #'          temperature from dls
+    #'          D.array     diffusion coefficients for Rh.array
+    #'          G.array     exponents for the Rh.array
+    #'          Rh.array    the Rh.array
+    #'          dist        weights of the size distribution
+    #'
+    #' @export
+    #'
 
     if(is.null(fit$g2) || is.null(fit$tau) || is.null(fit$Rh.array) ||
        is.null(fit$dist) || is.null(fit$temperature) || is.null(fit$eta) ||
@@ -923,6 +1077,8 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
         Rh.min <- Rh.range[1]
         Rh.max <- Rh.range[2]
         # cat('selected:', Rh.min, Rh.max, '\n')
+    } else {
+        plot(fit$Rh.array, fit$dist, log='x', type='o', main='size distribution')
     }
 
     if (is.null(Rh.min)) {
@@ -938,9 +1094,15 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
     }
 
     indx <- (fit$Rh.array >= Rh.min) & (fit$Rh.array <= Rh.max)
+    if (sum(indx) < 2) {
+        cat('Not enough points are selected\n')
+        return()
+    }
+
     Rh.array <- fit$Rh.array[indx]
     dist <- fit$dist[indx]
-    points(Rh.array, dist, col='blue', pch= 16, cex= 1.1)
+    # indicate the selected points
+    points(Rh.array, dist, col='red', pch= 16, cex= 1.1)
 
     kB <- 13.8064852; #J/K --> nm
     g2.norm <- ifelse(is.null(fit$g2.norm), 1, fit$g2.norm)
@@ -948,15 +1110,16 @@ correlation.limit.sizes <- function(fit, Rh.min= NULL, Rh.max= NULL) {
     D.array <- kB*fit$temperature / (6*pi*fit$eta*Rh.array); # in micron^2 / sec.
     # unit matching to G in 1/ms = kHz
     G.array <- 2*fit$q^2*D.array/1000;
-    func.array <- exp(outer(fit$tau, -G.array))
     # calculate the correlation but convert it to the experimental curve
     # scaling it and applying a constand background shift based on the known fit
-    g2.calc <- g2.norm * func.array %*% dist + g2.bg
+    # func.array <- exp(outer(fit$tau, -G.array, '*'))
+    # g2.calc <- g2.norm * func.array %*% dist + g2.bg
+    g2.calc <- g2.norm * g.2(fit$tau, G.array, dist) + g2.bg
     g2.diff <- fit$g2 - g2.calc
 
     dev.new()
     plot(fit$tau, g2.diff, log='x', type='o',
-         xlab=expression(paste(tau, ', ms', sep='')),
+         xlab= expression(paste(tau, ', ms', sep='')),
          ylab= expression(paste('g'^'(2)', '(', tau, ')', sep='')),
          main='residual g2'
          )

@@ -1,4 +1,4 @@
-read.DLS.csv <- function(filename, theta=90.0,
+read.DLS.zetasizer <- function(filename, theta=90.0,
                          temperature= 25.0,
                          eta = 0.89,
                          n = 1.334,
@@ -8,26 +8,31 @@ read.DLS.csv <- function(filename, theta=90.0,
                          dec= '.',
                          ch.names = c('ch1','ch2','ch3')
                          ) {
-    #' read a csv file containing the correlation data form Zetasizer
-    #' form a list for the DLS processing, adding the missing parameter
-    #' the array is typically three X,Y columns containing the correlation
+    #' read a csv file containing the correlation data from Zetasizer
+    #' @details
+    #' Read a csv file containing the correlation data from Zetasizer
+    #' and form a list for the DLS processing, adding the missing parameters.
+    #' The array is typically three X,Y columns containing the correlation
     #' delay time as x in microseconds, and g2-1 for correlation functions,
     #' for the steady state, transient and unfiltered versions.
     #' However, this may be somewhat different how the export was performed.
     #'
-    #' @param filename  the file to read
-    #' @param theta     the scattering angle in degrees
-    #' @param temperature in degrees Celsius
-    #' @param eta       the viscosity in mPas (cP)
-    #' @param n         the refractive index of the medium
-    #' @param lambda    the wavelength of the laser in nm
-    #' @param microsec  Bool: if the time is in microseconds
+    #' @param filename  text, the file to read
+    #' @param theta     float, the scattering angle in degrees
+    #' @param temperature float, in degrees Celsius
+    #' @param eta       float, the viscosity in mPas (cP)
+    #' @param n         float, the refractive index of the medium
+    #' @param lambda    float, the wavelength of the laser in nm
+    #' @param microsec  Boolean, if the time is in microseconds
     #'                  instead of milliseconds
-    #' @param sep       the field separator
-    #' @param dec       decimal separator, i.e. '.' or ','
-    #' @params ch.names a list of 3 names for the correlation names
+    #' @param sep       character, the field separator
+    #' @param dec       character, decimal separator, i.e. '.' or ','
+    #' @param ch.names a list of 3 names for the correlation names
     #'
     #' @return      a list containing all the information
+    #'              time, filename, lambda, temperature,
+    #'              n, eta, theta, theta.rad, q, correlation
+    #' @export
 
     t.names <- c('tau', 'tau.trans', 'tau.unfilt')
 

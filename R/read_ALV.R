@@ -1,36 +1,30 @@
-#' Dynamic light scattering analysis functions, especially designed for
-#' the ALV DLS system. However, the analysis and plotting tools are
-#' useful for any other data sets.
-#' They may require lists with specific elements, look into the
-#' code and comments for further details.
-#' Author: T. Haraszti (haraszti@dwi.rwth-aachen.de)
-#' Date: 2018 -
-#' Licence: CC-BY-4
-#' Warranty: None
-
 read.ALV <- function(filename){
     #' read ALV correlation files
-    #' extract the file content, especially date, time,
-    #' temperature, viscosity, wavelength, scattering angle
-    #' autocorrelation table etc.
+    #' @details
+    #' Read the ASC file output of the ALV DLS system, extract
+    #' metadata related to the experiment and the autocorrelation
+    #' tables.
+    #' Important metadata include date, time, sample name, temperature,
+    #' medium refractive index, viscosity, scattering angle
     #'
-    #' @param filename  name of the file to read (with path)
+    #' The file has a relatively fixed structure, which is read out in as text
+    #' then processed according to a predefined schema (a set of fields expected)
+    #'
+    #' @param filename text, name of the file to read (with path)
+    #;
     #' @return a list containing all information, also adding parameters such as
     #'          q (scattering vector), theta.rad the scattering angle in radians
-    #' @usage a <- read.LVS(filename)
     #'
+    #' @export
 
     if( ! file.exists(filename) ){
         cat("Invalid filename ", filename, "is provided\n");
-        return ;
+        return()
     }
     # we use a predefined set of fields which come line-by-line
     # in the file header
     fields <- c('date', 'time','sample',
                 paste('sample', 1:10, sep='.'),
-#                'sample.1','sample.2','sample.3',
-#                'sample.4', 'sample.5', 'sample.6', 'sample.7', 'sample.8',
-#                'sample.9', 'sample.10',
                 'temperature', 'eta', 'n', 'lambda',
                 'theta', 'duration', 'duration.float', 'time.stop', 'runs',
                 'mode', 'mean.cr.0', 'mean.cr.1', 'mean.cr.2', 'mean.cr.3');

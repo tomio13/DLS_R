@@ -1,0 +1,23 @@
+
+importFrom("grDevices", "dev.new")
+importFrom("graphics", "abline", "legend", "lines",
+            "locator", "par","points")
+importFrom("stats", "approx", "coef", "lm", "optim", "predict",
+               "spline")
+importFrom("utils", "read.table", "str")
+# importFrom("base", "seq")
+
+export(MSD)
+export(seq.log)
+export(g.2)
+export(smooth.dist)
+export(analysis.cumulant)
+export(analysis.sizes)
+export(correlation.limit.sizes)
+export(plot.DLS)
+export(plot.DLS.dist)
+export(plot.corr.series)
+export(plot.dist.series)
+export(read.ALV)
+export(read.DLS.zetasizer)
+
