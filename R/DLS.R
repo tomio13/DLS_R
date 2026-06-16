@@ -839,7 +839,7 @@ plot.DLS <- function(dls,
                ...
             )
             abline(h= 0, col='green')
-            par <- p
+            par(p)
         }
     }
 }
