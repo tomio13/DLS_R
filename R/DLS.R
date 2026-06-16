@@ -345,6 +345,10 @@ analysis.sizes <- function(dls,
     #'  The intensity autocorrelation is background corrected (constant subtracted) and
     #'  normalized to 1 before fitting. The fitted result is then scaled back to the original
     #'  data.
+    #'  The dls list has to have a dls$correlation array with columns for 'tau' as
+    #'  delay times in ms, and correlation channels as dls$correlation[,'tau'] and
+    #'  dls$correlation[,g2.channel] respectively.
+    #'
     #'  For every requested alpha value the fit is performed using the Rh array.
     #'  The exponents are Gamma = 2*q**2*(kB T)/(6 pi eta Rh),
     #'  for every tau delay in tau.array the exponent goes:
