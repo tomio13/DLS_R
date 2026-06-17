@@ -1,0 +1,7 @@
+^DLS.R-[0-9]*$
+^\\.git
+^docs.*
+^old-code.*
+^Examples.*
+^tests.*
+^LICENSE.md$
